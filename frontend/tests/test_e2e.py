@@ -10,6 +10,8 @@ TIMEOUT_MS = 15000
 # Surchargables par variables d environnement pour ne pas figer d identifiants.
 DEMO_USER = os.getenv("OBRAIL_VIEWER_USER", "viewer")
 DEMO_PASSWORD = os.getenv("OBRAIL_VIEWER_PASSWORD", "viewer123")
+DEMO_ADMIN_USER = os.getenv("OBRAIL_ADMIN_USER", "admin")
+DEMO_ADMIN_PASSWORD = os.getenv("OBRAIL_ADMIN_PASSWORD", "admin123")
 
 
 def sign_in(page):
@@ -21,8 +23,25 @@ def sign_in(page):
     return page
 
 
+def sign_in_admin(page):
+    """Connexion en tant qu administrateur (acces aux routes /agent/*)."""
+    page.goto(FRONTEND_URL, wait_until="networkidle", timeout=TIMEOUT_MS)
+    page.get_by_label("Identifiant de connexion").fill(DEMO_ADMIN_USER, timeout=TIMEOUT_MS)
+    page.get_by_label("Mot de passe").fill(DEMO_ADMIN_PASSWORD, timeout=TIMEOUT_MS)
+    page.get_by_role("button", name="Se connecter").click(timeout=TIMEOUT_MS)
+    return page
+
+
 def open_dashboard(page):
     sign_in(page)
+    expect(page.get_by_role("heading", name="Tableau de bord ferroviaire")).to_be_visible(
+        timeout=TIMEOUT_MS,
+    )
+    return page
+
+
+def open_dashboard_admin(page):
+    sign_in_admin(page)
     expect(page.get_by_role("heading", name="Tableau de bord ferroviaire")).to_be_visible(
         timeout=TIMEOUT_MS,
     )
@@ -46,6 +65,9 @@ def test_filtre_par_pays_fonctionne():
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         open_dashboard(page)
+
+        # Les filtres sont dans l onglet "Trajets" depuis la refonte en onglets (etape F).
+        page.get_by_role("tab", name="Trajets").click(timeout=TIMEOUT_MS)
 
         result_count = page.locator(".table-count")
         expect(result_count).to_contain_text("resultats", timeout=TIMEOUT_MS)
@@ -124,5 +146,108 @@ def test_deconnexion_ramene_a_l_ecran_de_connexion():
         expect(page.get_by_label("Identifiant de connexion")).to_be_visible(
             timeout=TIMEOUT_MS
         )
+
+        browser.close()
+
+
+# === Tests Agent IA (etape G) ================================================
+
+
+def test_onglets_de_navigation_presents_apres_connexion():
+    """Les trois onglets Tableau de bord, Trajets et Assistant IA sont accessibles."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard(page)
+
+        tablist = page.get_by_role("tablist")
+        expect(tablist).to_be_visible(timeout=TIMEOUT_MS)
+        expect(page.get_by_role("tab", name="Tableau de bord")).to_be_visible(timeout=TIMEOUT_MS)
+        expect(page.get_by_role("tab", name="Trajets")).to_be_visible(timeout=TIMEOUT_MS)
+        expect(page.get_by_role("tab", name="Assistant IA")).to_be_visible(timeout=TIMEOUT_MS)
+
+        browser.close()
+
+
+def test_viewer_voit_acces_refuse_sur_onglet_assistant():
+    """Un viewer clique sur Assistant IA et voit le message d acces refuse (D5)."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard(page)
+
+        page.get_by_role("tab", name="Assistant IA").click(timeout=TIMEOUT_MS)
+
+        # D5 : viewer voit le panneau "acces refuse", jamais l interface de chat
+        expect(page.get_by_text("reserve aux administrateurs")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+        # La zone de saisie de message ne doit pas etre presente
+        expect(page.get_by_label("Message pour l'assistant IA")).to_have_count(0)
+
+        browser.close()
+
+
+def test_admin_voit_interface_chat_sur_onglet_assistant():
+    """Un admin acces a l onglet Assistant IA et voit le champ de saisie (D5 verifie)."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard_admin(page)
+
+        page.get_by_role("tab", name="Assistant IA").click(timeout=TIMEOUT_MS)
+
+        # L interface de chat doit etre presente pour un admin
+        expect(page.get_by_label("Message pour l'assistant IA")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+        expect(page.get_by_role("button", name="Envoyer le message")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+
+        browser.close()
+
+
+def test_admin_flux_chat_complet_en_mode_rejeu():
+    """
+    Validation bout en bout du flux de chat (C8) en mode rejeu.
+
+    Precondition : backend demarre avec OBRAIL_LLM_PROVIDER=rejeu
+    (reponse deterministe, rapide, sans reseau externe).
+
+    Le test verifie :
+    1. Le message utilisateur s affiche dans le chat
+    2. L indicateur "en cours de generation" apparait
+    3. La reponse de l assistant s affiche (bulle assistant visible)
+    4. L indicateur de generation disparait apres la reponse
+    """
+    # Timeout elargi pour attendre la reponse rejeu (< 1 s en pratique)
+    CHAT_TIMEOUT_MS = 30000
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard_admin(page)
+
+        page.get_by_role("tab", name="Assistant IA").click(timeout=TIMEOUT_MS)
+        expect(page.get_by_label("Message pour l'assistant IA")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+
+        # Envoyer une question pre-enregistree (Q1 rejeu)
+        textarea = page.get_by_label("Message pour l'assistant IA")
+        textarea.fill("Combien de trajets electriques recense-t-on en France ?")
+        page.get_by_role("button", name="Envoyer le message").click(timeout=TIMEOUT_MS)
+
+        # La bulle utilisateur doit etre visible immediatement
+        expect(page.locator(".chat-bubble-user")).to_be_visible(timeout=TIMEOUT_MS)
+
+        # La reponse de l assistant doit apparaitre (rejeu : < 500 ms)
+        expect(page.locator(".chat-bubble-assistant")).to_be_visible(
+            timeout=CHAT_TIMEOUT_MS
+        )
+
+        # L indicateur de generation doit avoir disparu
+        expect(page.locator(".chat-typing")).to_have_count(0)
 
         browser.close()

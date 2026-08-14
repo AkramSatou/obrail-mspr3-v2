@@ -183,3 +183,16 @@ export function fetchTrajets(filters) {
 export function fetchCurrentUser() {
   return requestJson("/auth/me");
 }
+
+export function envoyerMessageAgent(message, sessionId = null) {
+  const corps = sessionId ? { message, session_id: sessionId } : { message };
+  return requestJson("/agent/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corps),
+  });
+}
+
+export function fetchAgentInfo() {
+  return requestJson("/agent/info");
+}

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AuthError,
   buildTrajetsQuery,
+  envoyerMessageAgent,
+  fetchAgentInfo,
   fetchTrajets,
   getApiErrorMessage,
   isAuthenticated,
@@ -107,5 +109,82 @@ describe("authentification", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchTrajets({})).rejects.toThrow(/Acces refuse/);
+  });
+});
+
+describe("envoyerMessageAgent", () => {
+  it("envoie un POST /agent/chat avec le message et retourne la reponse", async () => {
+    const mockReponse = {
+      reponse: "42 trajets electriques en France.",
+      session_id: "sess-001",
+      mode: "rejeu",
+      fournisseur: "rejeu",
+      modele: "rejeu",
+      duree_ms: 55,
+      iterations: 1,
+      trace: [],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockReponse,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultat = await envoyerMessageAgent("Combien de trajets electriques en France ?", null);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/agent\/chat$/);
+    expect(options.method).toBe("POST");
+    expect(JSON.parse(options.body)).toMatchObject({ message: "Combien de trajets electriques en France ?" });
+    expect(resultat).toEqual(mockReponse);
+  });
+
+  it("inclut le session_id dans le corps quand il est fourni", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        reponse: "ok",
+        session_id: "sess-abc",
+        mode: "rejeu",
+        fournisseur: "rejeu",
+        modele: "rejeu",
+        duree_ms: 10,
+        iterations: 1,
+        trace: [],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await envoyerMessageAgent("Question", "sess-abc");
+
+    const [, options] = fetchMock.mock.calls[0];
+    expect(JSON.parse(options.body)).toMatchObject({ session_id: "sess-abc" });
+  });
+});
+
+describe("fetchAgentInfo", () => {
+  it("appelle GET /agent/info et retourne les informations du fournisseur", async () => {
+    const mockInfo = {
+      fournisseur: "rejeu",
+      modele: "rejeu",
+      mode: "rejeu",
+      max_iterations: 5,
+      timeout_s: 120,
+      outils: ["obtenir_statistiques", "rechercher_trajets"],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockInfo,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultat = await fetchAgentInfo();
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/agent\/info$/);
+    expect(resultat).toEqual(mockInfo);
   });
 });
