@@ -3,7 +3,12 @@ from playwright.sync_api import expect, sync_playwright
 
 import os
 
-FRONTEND_URL = "http://localhost:5173"
+# Le frontend est exposé côté hôte sur le port 5199 (et non 5173) dans
+# docker/docker-compose.yml : les plages 5085-5184 sont réservées par
+# Windows (Hyper-V/WSL) sur la machine de démonstration — voir
+# PLAN_AGENT_IA_OBRAIL.md §0.5. Surchargable par variable d'environnement
+# pour les environnements où un autre port serait exposé (ex. CI).
+FRONTEND_URL = os.getenv("OBRAIL_FRONTEND_URL", "http://localhost:5199")
 TIMEOUT_MS = 15000
 
 # Comptes de demonstration crees par backend/seed_users.py.

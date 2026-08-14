@@ -787,6 +787,36 @@ function LoginScreen({ onSuccess }) {
   );
 }
 
+class FrontiereErreur extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { erreur: null };
+  }
+
+  static getDerivedStateFromError(erreur) {
+    return { erreur };
+  }
+
+  render() {
+    if (this.state.erreur) {
+      return (
+        <main className="login-screen">
+          <div className="login-card">
+            <h1>ObRail — Erreur inattendue</h1>
+            <p role="alert" style={{ color: 'var(--color-danger, #e53e3e)', marginBottom: '1rem' }}>
+              {String(this.state.erreur)}
+            </p>
+            <button type="button" onClick={() => window.location.reload()}>
+              Recharger la page
+            </button>
+          </div>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function Root() {
   const [authenticated, setAuthenticated] = useState(isAuthenticated());
 
@@ -820,9 +850,15 @@ function Root() {
           Se deconnecter
         </button>
       </div>
-      <App />
+      <FrontiereErreur>
+        <App />
+      </FrontiereErreur>
     </>
   );
 }
 
-createRoot(document.getElementById("root")).render(<Root />);
+createRoot(document.getElementById("root")).render(
+  <FrontiereErreur>
+    <Root />
+  </FrontiereErreur>
+);

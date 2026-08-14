@@ -1,3 +1,5 @@
+import React from 'react';
+
 export function IconeTableau({ taille = 20, ...props }) {
   return (
     <svg width={taille} height={taille} viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
