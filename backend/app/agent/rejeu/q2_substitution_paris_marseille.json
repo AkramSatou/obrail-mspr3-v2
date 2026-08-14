@@ -1,0 +1,42 @@
+{
+  "question": "Le trajet Paris–Marseille en train est-il substituable à l'avion ?",
+  "question_normalisee": "le trajet paris marseille en train est il substituable a l avion",
+  "reponse": "Oui. Sur la liaison Paris–Marseille (800 km, 195 min, 3 arrêts, traction électrique), notre modèle de classification prédit substitution_avion = 1 avec une probabilité de 1.0. Cette liaison est pleinement substituable à l'avion.",
+  "session_id": "rejeu-demo-q2",
+  "mode": "rejeu",
+  "fournisseur": "ollama",
+  "modele": "qwen3:8b",
+  "duree_ms": 8700,
+  "iterations": 2,
+  "trace": [
+    {
+      "etape": 1,
+      "type": "outil",
+      "outil": "rechercher_trajets",
+      "arguments": {"origine": "Paris", "destination": "Marseille", "limite": 3},
+      "resultat_resume": "1 trajet(s) trouvé(s) sur 1 correspondant(s).",
+      "duree_ms": 120
+    },
+    {
+      "etape": 2,
+      "type": "outil",
+      "outil": "predire_substitution_avion",
+      "arguments": {
+        "distance_km": 800.0,
+        "duration_minutes": 195.0,
+        "n_stops": 3,
+        "co2_estime": 450000.0,
+        "consommation_totale": 16000.0,
+        "type_train": "electric",
+        "country": "FR"
+      },
+      "resultat_resume": "substitution_avion=1, probabilite=1.0",
+      "duree_ms": 45
+    },
+    {
+      "etape": 3,
+      "type": "reponse",
+      "contenu": "Oui. Sur la liaison Paris–Marseille (800 km, 195 min, 3 arrêts, traction électrique), notre modèle de classification prédit substitution_avion = 1 avec une probabilité de 1.0. Cette liaison est pleinement substituable à l'avion."
+    }
+  ]
+}

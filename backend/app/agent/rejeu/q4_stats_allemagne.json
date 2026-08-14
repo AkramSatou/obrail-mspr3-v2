@@ -1,0 +1,26 @@
+{
+  "question": "Combien de trajets y a-t-il en Allemagne ?",
+  "question_normalisee": "combien de trajets y a t il en allemagne",
+  "reponse": "En Allemagne, l'observatoire ObRail recense 28 312 trajets (électriques et diesel confondus), représentant une distance cumulée de 14 892 450 km et des émissions cumulées de 3 241 780 kgCO2.",
+  "session_id": "rejeu-demo-q4",
+  "mode": "rejeu",
+  "fournisseur": "ollama",
+  "modele": "qwen3:8b",
+  "duree_ms": 3900,
+  "iterations": 1,
+  "trace": [
+    {
+      "etape": 1,
+      "type": "outil",
+      "outil": "obtenir_statistiques",
+      "arguments": {"pays": "DE"},
+      "resultat_resume": "28312 trajet(s), 14892450.0 km cumulés, 3241780.0 kgCO2 cumulés.",
+      "duree_ms": 38
+    },
+    {
+      "etape": 2,
+      "type": "reponse",
+      "contenu": "En Allemagne, l'observatoire ObRail recense 28 312 trajets (électriques et diesel confondus), représentant une distance cumulée de 14 892 450 km et des émissions cumulées de 3 241 780 kgCO2."
+    }
+  ]
+}

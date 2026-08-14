@@ -80,6 +80,11 @@ logger = logging.getLogger("obrail.api")
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 
+# Journal de l'agent IA — obrail.agent.* propage vers ce logger (ÉTAPE D)
+logger_agent = logging.getLogger("obrail.agent")
+logger_agent.setLevel(logging.INFO)
+logger_agent.addHandler(handler)
+
 # ---------------------------------------------------------------------------
 # Limitation des tentatives de connexion (OWASP A07)
 # ---------------------------------------------------------------------------
@@ -335,6 +340,109 @@ def _http_metrics_lines() -> list[str]:
     return lines
 
 
+# ---------------------------------------------------------------------------
+# Métriques agent IA (ÉTAPE D) — nommage obrail_agent_* comme existant
+# ---------------------------------------------------------------------------
+
+_AGENT_LATENCY_BUCKETS = (0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0)
+_AGENT_ITERATION_BUCKETS = (1, 2, 3, 4, 5)
+_AGENT_REQUESTS_TOTAL: dict[str, int] = defaultdict(int)     # statut → count
+_AGENT_TOOL_CALLS_TOTAL: dict[str, int] = defaultdict(int)   # outil → count
+_AGENT_DURATION_SUM: dict[str, float] = defaultdict(float)   # "v" → somme
+_AGENT_DURATION_COUNT: dict[str, int] = defaultdict(int)     # "v" → count
+_AGENT_DURATION_BUCKETS: dict[float, int] = defaultdict(int) # seuil → count cumulatif
+_AGENT_ITERATIONS_SUM: dict[str, int] = defaultdict(int)
+_AGENT_ITERATIONS_COUNT: dict[str, int] = defaultdict(int)
+_AGENT_ITERATIONS_BUCKETS: dict[int, int] = defaultdict(int)
+
+
+def _record_agent_metric(
+    duree_s: float,
+    iterations: int,
+    statut: str,
+    outils: list[str],
+) -> None:
+    """Enregistre les métriques d'une requête agent."""
+    _AGENT_REQUESTS_TOTAL[statut] += 1
+    _AGENT_DURATION_SUM["v"] += duree_s
+    _AGENT_DURATION_COUNT["v"] += 1
+    for bucket in _AGENT_LATENCY_BUCKETS:
+        if duree_s <= bucket:
+            _AGENT_DURATION_BUCKETS[bucket] += 1
+    _AGENT_ITERATIONS_SUM["v"] += iterations
+    _AGENT_ITERATIONS_COUNT["v"] += 1
+    for bucket in _AGENT_ITERATION_BUCKETS:
+        if iterations <= bucket:
+            _AGENT_ITERATIONS_BUCKETS[bucket] += 1
+    for outil in outils:
+        _AGENT_TOOL_CALLS_TOTAL[outil] += 1
+
+
+def _agent_up_value() -> int:
+    try:
+        from app.agent.config import charger_config
+        charger_config()
+        return 1
+    except Exception:
+        return 0
+
+
+def _agent_metrics_lines() -> list[str]:
+    """Expose les compteurs et histogrammes agent au format Prometheus."""
+    lines = [
+        "# HELP obrail_agent_requests_total Nombre total de requêtes traitées par l'agent IA.",
+        "# TYPE obrail_agent_requests_total counter",
+    ]
+    for statut, count in sorted(_AGENT_REQUESTS_TOTAL.items()):
+        lines.append(_format_sample("obrail_agent_requests_total", {"statut": statut}, count))
+
+    lines.extend([
+        "# HELP obrail_agent_tool_calls_total Nombre d'appels par outil de l'agent.",
+        "# TYPE obrail_agent_tool_calls_total counter",
+    ])
+    for outil, count in sorted(_AGENT_TOOL_CALLS_TOTAL.items()):
+        lines.append(_format_sample("obrail_agent_tool_calls_total", {"outil": outil}, count))
+
+    lines.extend([
+        "# HELP obrail_agent_duration_seconds Durée des requêtes agent en secondes.",
+        "# TYPE obrail_agent_duration_seconds histogram",
+    ])
+    cumul = 0
+    for bucket in _AGENT_LATENCY_BUCKETS:
+        cumul = _AGENT_DURATION_BUCKETS.get(bucket, cumul)
+        lines.append(
+            _format_sample("obrail_agent_duration_seconds_bucket", {"le": str(bucket)}, cumul)
+        )
+    total_dur = _AGENT_DURATION_COUNT["v"]
+    lines.append(_format_sample("obrail_agent_duration_seconds_bucket", {"le": "+Inf"}, total_dur))
+    lines.append(_format_sample("obrail_agent_duration_seconds_count", {}, total_dur))
+    lines.append(
+        _format_sample("obrail_agent_duration_seconds_sum", {}, round(_AGENT_DURATION_SUM["v"], 6))
+    )
+
+    lines.extend([
+        "# HELP obrail_agent_iterations Nombre d'itérations de la boucle agent par requête.",
+        "# TYPE obrail_agent_iterations histogram",
+    ])
+    cumul_it = 0
+    for bucket in _AGENT_ITERATION_BUCKETS:
+        cumul_it = _AGENT_ITERATIONS_BUCKETS.get(bucket, cumul_it)
+        lines.append(
+            _format_sample("obrail_agent_iterations_bucket", {"le": str(bucket)}, cumul_it)
+        )
+    total_it = _AGENT_ITERATIONS_COUNT["v"]
+    lines.append(_format_sample("obrail_agent_iterations_bucket", {"le": "+Inf"}, total_it))
+    lines.append(_format_sample("obrail_agent_iterations_count", {}, total_it))
+    lines.append(_format_sample("obrail_agent_iterations_sum", {}, _AGENT_ITERATIONS_SUM["v"]))
+
+    lines.extend([
+        "# HELP obrail_agent_up Disponibilité de l'agent IA (1=opérationnel, 0=erreur config).",
+        "# TYPE obrail_agent_up gauge",
+        _format_sample("obrail_agent_up", {}, _agent_up_value()),
+    ])
+    return lines
+
+
 def _error_payload(
     *,
     request: Request,
@@ -574,6 +682,55 @@ class StatsVolumesResponse(BaseModel):
     total_kg_co2_emis: float = Field(description="Émissions cumulées en kgCO2")
     by_country: list[VolumeBucket] = Field(description="Volumes agrégés par pays")
     by_type_train: list[VolumeBucket] = Field(description="Volumes agrégés par type de train")
+
+
+# ---------------------------------------------------------------------------
+# Schémas Pydantic — Agent IA (ÉTAPE C)
+# ---------------------------------------------------------------------------
+
+
+class AgentChatRequest(BaseModel):
+    """Corps attendu par POST /agent/chat."""
+
+    message: str = Field(..., min_length=1, max_length=2000, description="Question adressée à l'agent")
+    session_id: Optional[str] = Field(default=None, description="Identifiant de session (généré si absent)")
+
+
+class EntreeTrace(BaseModel):
+    """Une étape dans la trace de raisonnement de l'agent."""
+
+    etape: int = Field(description="Numéro d'étape dans la trace")
+    type: str = Field(description="Type d'entrée : 'outil' ou 'reponse'")
+    outil: Optional[str] = Field(default=None, description="Nom de l'outil appelé (si type='outil')")
+    arguments: Optional[dict] = Field(default=None, description="Arguments fournis à l'outil")
+    resultat_resume: Optional[str] = Field(default=None, description="Résumé une ligne du résultat")
+    duree_ms: Optional[int] = Field(default=None, description="Durée d'exécution de l'outil en ms")
+    contenu: Optional[str] = Field(default=None, description="Contenu de la réponse finale (si type='reponse')")
+
+
+class AgentChatResponse(BaseModel):
+    """Réponse complète de la route POST /agent/chat (contrat §3 du plan)."""
+
+    reponse: str = Field(description="Réponse finale de l'agent en langage naturel")
+    session_id: str = Field(description="Identifiant de session")
+    mode: str = Field(description="Mode d'exécution : 'direct' ou 'rejeu'")
+    fournisseur: str = Field(description="Fournisseur LLM utilisé")
+    modele: str = Field(description="Modèle LLM utilisé")
+    duree_ms: int = Field(description="Durée totale de la requête en millisecondes")
+    iterations: int = Field(description="Nombre d'itérations de la boucle")
+    trace: list[EntreeTrace] = Field(description="Trace détaillée du raisonnement")
+
+
+class AgentInfoResponse(BaseModel):
+    """Réponse de GET /agent/info."""
+
+    fournisseur: str = Field(description="Fournisseur configuré (auto/openrouter/ollama/rejeu)")
+    modele: str = Field(description="Modèle actif selon le fournisseur")
+    mode: str = Field(description="Mode d'exécution : 'direct' ou 'rejeu'")
+    disponible: bool = Field(description="True si la configuration est valide")
+    outils: list[str] = Field(description="Liste des outils disponibles pour l'agent")
+    max_iterations: int = Field(description="Nombre maximum d'itérations de la boucle")
+    timeout_s: int = Field(description="Timeout global d'une requête agent en secondes")
 
 
 # ---------------------------------------------------------------------------
@@ -1031,6 +1188,15 @@ def stats_volumes(
     )
 
 
+def _agent_health() -> dict:
+    """Informations de configuration de l'agent IA pour /health (D6 : hors calcul du statut global)."""
+    try:
+        from app.agent.selection import etat_agent
+        return etat_agent()
+    except Exception as exc:
+        return {"status": "erreur_config", "detail": str(exc)}
+
+
 @app.get("/health", tags=["Général"])
 def health(db: Session = Depends(get_db)):
     """Vérifie que l'API, le dataset et les deux modèles sont opérationnels."""
@@ -1064,6 +1230,7 @@ def health(db: Session = Depends(get_db)):
         "timestamp": _utc_now_iso(),
         "dataset": dataset,
         "models": models,
+        "agent": _agent_health(),
     }
 
 
@@ -1076,6 +1243,7 @@ def metrics(db: Session = Depends(get_db)):
         'obrail_api_info{app="obrail-backend",version="2.0.0"} 1',
         *_dependency_metrics_lines(db),
         *_http_metrics_lines(),
+        *_agent_metrics_lines(),
     ]
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
 
@@ -1133,6 +1301,34 @@ def _predict_substitution_logic(liaison: LiaisonSubstitutionInput) -> Substituti
         raise HTTPException(status_code=500, detail=f"Erreur de prédiction : {e}")
 
 
+_SCENARIOS_CO2_VALIDES = frozenset(
+    {"reference", "diesel_50_electrique", "conso_moins_15", "distance_moins_10"}
+)
+
+
+def _predict_co2_logic(liaison: LiaisonCO2Input) -> CO2Output:
+    """Logique commune à la route /predict/co2 et à l'outil estimer_co2_futur."""
+    if not _co2_ok:
+        raise HTTPException(status_code=503, detail=f"Modèle de régression CO2 indisponible : {_co2_error}")
+
+    if liaison.scenario not in _SCENARIOS_CO2_VALIDES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Scénario '{liaison.scenario}' inconnu. Valeurs acceptées : {sorted(_SCENARIOS_CO2_VALIDES)}"
+        )
+
+    try:
+        X = _build_co2_df(liaison)
+        co2_predit = float(_model_co2.predict(X)[0])
+        return CO2Output(
+            scenario=liaison.scenario,
+            co2_estime_kg=round(co2_predit, 4),
+            label=f"CO2 estimé : {co2_predit:.2f} kgCO2 (scénario : {liaison.scenario})",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur de prédiction CO2 : {e}")
+
+
 @app.post("/predict/co2", response_model=CO2Output, tags=["Régression CO2"])
 def predict_co2(
     liaison: LiaisonCO2Input,
@@ -1149,23 +1345,95 @@ def predict_co2(
 
     Retourne le CO2 estimé en **kgCO2**.
     """
-    if not _co2_ok:
-        raise HTTPException(status_code=503, detail=f"Modèle de régression CO2 indisponible : {_co2_error}")
+    return _predict_co2_logic(liaison)
 
-    scenarios_valides = {"reference", "diesel_50_electrique", "conso_moins_15", "distance_moins_10"}
-    if liaison.scenario not in scenarios_valides:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Scénario '{liaison.scenario}' inconnu. Valeurs acceptées : {sorted(scenarios_valides)}"
-        )
 
+# ---------------------------------------------------------------------------
+# Routes agent IA — D5 : require_role(ROLE_ADMIN) sur toutes les routes /agent/*
+# ---------------------------------------------------------------------------
+
+
+@app.post("/agent/chat", response_model=AgentChatResponse, tags=["Agent IA"])
+def agent_chat(
+    requete: AgentChatRequest,
+    request: Request,
+    current_user: User = Depends(require_role(ROLE_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """
+    Traite un message via la boucle d'agent IA et retourne la réponse avec sa trace.
+
+    Requiert le rôle **admin** (D5) — un viewer ne peut pas appeler les outils
+    de prédiction, même indirectement via l'agent.
+    """
+    import httpx as _httpx
+    from app.agent.boucle import executer_boucle
     try:
-        X = _build_co2_df(liaison)
-        co2_predit = float(_model_co2.predict(X)[0])
-        return CO2Output(
-            scenario=liaison.scenario,
-            co2_estime_kg=round(co2_predit, 4),
-            label=f"CO2 estimé : {co2_predit:.2f} kgCO2 (scénario : {liaison.scenario})",
+        resultat = executer_boucle(
+            message=requete.message,
+            session_id=requete.session_id,
+            db=db,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur de prédiction CO2 : {e}")
+        outils_appeles = [e["outil"] for e in resultat["trace"] if e["type"] == "outil"]
+        logger_agent.info(
+            "Agent statut=succes session=%s durée=%dms itérations=%d outils=%s",
+            resultat["session_id"], resultat["duree_ms"], resultat["iterations"], outils_appeles,
+        )
+        _record_agent_metric(
+            duree_s=resultat["duree_ms"] / 1000,
+            iterations=resultat["iterations"],
+            statut="succes",
+            outils=outils_appeles,
+        )
+        return AgentChatResponse(**resultat)
+    except TimeoutError:
+        logger_agent.warning("Agent statut=erreur type=timeout")
+        _record_agent_metric(0.0, 0, "erreur", [])
+        raise HTTPException(
+            status_code=504,
+            detail="Délai d'attente dépassé — l'agent n'a pas répondu à temps",
+        )
+    except _httpx.RequestError as exc:
+        logger_agent.warning("Agent statut=erreur type=fournisseur_injoignable erreur=%s", exc)
+        _record_agent_metric(0.0, 0, "erreur", [])
+        raise HTTPException(
+            status_code=503,
+            detail=f"Fournisseur LLM injoignable : {exc}",
+        )
+    except NotImplementedError as exc:
+        logger_agent.warning("Agent statut=erreur type=non_implemente erreur=%s", exc)
+        _record_agent_metric(0.0, 0, "erreur", [])
+        raise HTTPException(status_code=503, detail=str(exc))
+    except (ValueError, FileNotFoundError) as exc:
+        # Question non trouvée en mode rejeu — §0.6-1 : erreur explicite, pas de réponse inventée
+        logger_agent.warning("Agent statut=erreur type=rejeu_introuvable erreur=%s", exc)
+        _record_agent_metric(0.0, 0, "erreur", [])
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/agent/info", response_model=AgentInfoResponse, tags=["Agent IA"])
+def agent_info(
+    current_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """
+    Retourne la configuration active de l'agent IA.
+    N'expose jamais la clé API (D7).
+    Requiert le rôle **admin** (D5).
+    """
+    from app.agent.config import charger_config
+    from app.agent.outils import REGISTRE_OUTILS
+    config = charger_config()
+    modele = (
+        config.model_openrouter
+        if config.provider in ("openrouter", "auto")
+        else config.model_ollama
+    )
+    return AgentInfoResponse(
+        fournisseur=config.provider,
+        modele=modele,
+        mode="rejeu" if config.provider == "rejeu" else "direct",
+        disponible=config.provider != "rejeu",
+        outils=list(REGISTRE_OUTILS.keys()),
+        max_iterations=config.max_iterations,
+        timeout_s=config.timeout_s,
+    )

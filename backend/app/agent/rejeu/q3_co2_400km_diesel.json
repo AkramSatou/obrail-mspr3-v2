@@ -1,0 +1,35 @@
+{
+  "question": "Quelles émissions de CO2 pour un trajet de 400 km en diesel ?",
+  "question_normalisee": "quelles emissions de co2 pour un trajet de 400 km en diesel",
+  "reponse": "Pour un trajet de 400 km en train diesel (consommation 10 kWh/km, facteur carbone 21,7 gCO2/kWh, consommation totale 4 000 kWh), notre modèle de régression estime les émissions CO2 à 104,34 kgCO2 en scénario de référence.",
+  "session_id": "rejeu-demo-q3",
+  "mode": "rejeu",
+  "fournisseur": "ollama",
+  "modele": "qwen3:8b",
+  "duree_ms": 6800,
+  "iterations": 1,
+  "trace": [
+    {
+      "etape": 1,
+      "type": "outil",
+      "outil": "estimer_co2_futur",
+      "arguments": {
+        "distance_km": 400.0,
+        "duration_minutes": 120.0,
+        "n_stops": 2,
+        "consommation_energy": 10.0,
+        "gco2_per_kwh": 21.7,
+        "consommation_totale": 4000.0,
+        "type_train": "diesel",
+        "scenario": "reference"
+      },
+      "resultat_resume": "co2_estime_kg=104.3425 (scénario reference)",
+      "duree_ms": 52
+    },
+    {
+      "etape": 2,
+      "type": "reponse",
+      "contenu": "Pour un trajet de 400 km en train diesel (consommation 10 kWh/km, facteur carbone 21,7 gCO2/kWh, consommation totale 4 000 kWh), notre modèle de régression estime les émissions CO2 à 104,34 kgCO2 en scénario de référence."
+    }
+  ]
+}

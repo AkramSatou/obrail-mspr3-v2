@@ -1,0 +1,26 @@
+{
+  "question": "Quelles sont les statistiques des trajets diesel en Europe ?",
+  "question_normalisee": "quelles sont les statistiques des trajets diesel en europe",
+  "reponse": "Sur l'ensemble du réseau européen ObRail, les trains diesel représentent 42 156 trajets, avec une distance cumulée de 19 874 320 km et des émissions cumulées de 8 932 140 kgCO2 — soit environ 3 fois plus d'émissions par kilomètre que les trains électriques.",
+  "session_id": "rejeu-demo-q5",
+  "mode": "rejeu",
+  "fournisseur": "ollama",
+  "modele": "qwen3:8b",
+  "duree_ms": 5100,
+  "iterations": 1,
+  "trace": [
+    {
+      "etape": 1,
+      "type": "outil",
+      "outil": "obtenir_statistiques",
+      "arguments": {"type_train": "diesel"},
+      "resultat_resume": "42156 trajet(s), 19874320.0 km cumulés, 8932140.0 kgCO2 cumulés.",
+      "duree_ms": 41
+    },
+    {
+      "etape": 2,
+      "type": "reponse",
+      "contenu": "Sur l'ensemble du réseau européen ObRail, les trains diesel représentent 42 156 trajets, avec une distance cumulée de 19 874 320 km et des émissions cumulées de 8 932 140 kgCO2 — soit environ 3 fois plus d'émissions par kilomètre que les trains électriques."
+    }
+  ]
+}

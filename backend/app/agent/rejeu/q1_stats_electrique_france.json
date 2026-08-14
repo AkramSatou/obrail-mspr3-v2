@@ -1,0 +1,26 @@
+{
+  "question": "Combien de trajets électriques recense-t-on en France ?",
+  "question_normalisee": "combien de trajets electriques recense t on en france",
+  "reponse": "En France, l'observatoire ObRail recense 35 847 trajets électriques, représentant une distance cumulée d'environ 16 234 567 km et des émissions cumulées de 892 341 kgCO2.",
+  "session_id": "rejeu-demo-q1",
+  "mode": "rejeu",
+  "fournisseur": "ollama",
+  "modele": "qwen3:8b",
+  "duree_ms": 4200,
+  "iterations": 1,
+  "trace": [
+    {
+      "etape": 1,
+      "type": "outil",
+      "outil": "obtenir_statistiques",
+      "arguments": {"pays": "FR", "type_train": "electric"},
+      "resultat_resume": "35847 trajet(s), 16234567.0 km cumulés, 892341.0 kgCO2 cumulés.",
+      "duree_ms": 45
+    },
+    {
+      "etape": 2,
+      "type": "reponse",
+      "contenu": "En France, l'observatoire ObRail recense 35 847 trajets électriques, représentant une distance cumulée d'environ 16 234 567 km et des émissions cumulées de 892 341 kgCO2."
+    }
+  ]
+}
