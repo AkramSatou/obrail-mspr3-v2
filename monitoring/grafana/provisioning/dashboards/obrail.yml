@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: ObRail
+    orgId: 1
+    folder: ObRail
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,48 @@
+List,Card,Description,Labels
+Backlog,Définir ce qu'on reprend de la MSPR 2,Dataset + modèles + API prototype,Cadrage
+Backlog,Faire le point sur l'architecture cible,,Architecture
+Backlog,Lister les technos qu'on va utiliser,FastAPI PostgreSQL React Docker GitHub Actions,Cadrage
+En cours,Revoir la structure du backend,Le code existant est un peu brouillon à nettoyer,Backend
+En cours,Brancher PostgreSQL sur l'API,,Backend
+En cours,Page d'accueil du frontend,Afficher les indicateurs principaux,Frontend
+À faire,Route GET /trajets avec pagination,,Backend
+À faire,Route GET /trajets/{id},,Backend
+À faire,Route GET /stats/volumes,,Backend
+À faire,Améliorer le /health,Vérifier aussi les modèles et la BDD,Backend
+À faire,Corriger le bug sur les prédictions,Le scaler n'était pas appliqué avant predict,Backend
+À faire,Script pour importer le CSV en base,Doit pouvoir tourner plusieurs fois sans problème,ETL
+À faire,Filtres sur la liste des trajets,Pays type de train gare départ arrivée distance,Frontend
+À faire,Accessibilité sur le frontend,aria-label sur les inputs navigation clavier,Frontend
+À faire,Dockerfile backend,,Docker
+À faire,Dockerfile frontend,,Docker
+À faire,Docker Compose avec tous les services,Backend frontend BDD monitoring,Docker
+À faire,Script de démarrage,Attendre que PostgreSQL soit prêt avant de lancer l'API,Docker
+À faire,Mettre en place les tests Pytest,Utiliser SQLite en mémoire pour ne pas dépendre de PostgreSQL,Tests
+À faire,Tests E2E avec Playwright,Tester le parcours utilisateur principal,Tests
+À faire,Pipeline GitHub Actions,Au moins les tests et le build Docker,CI/CD
+À faire,Ajouter Prometheus,Métriques sur les routes de l'API,Monitoring
+À faire,Dashboard Grafana,Voir l'état de l'API en temps réel,Monitoring
+À faire,Centraliser les logs,Loki + Grafana,Monitoring
+À faire,Rapport technique,,Documentation
+À faire,README pour le repo,,Documentation
+Terminé,Cadrage initial de la MSPR,,Cadrage
+Terminé,Architecture validée en équipe,,Architecture
+Terminé,Backend stabilisé,,Backend
+Terminé,Correction StandardScaler,Bug silencieux détecté et corrigé,Backend
+Terminé,Pagination SQL native,Bien plus rapide qu'avec pandas,Backend
+Terminé,seed.py idempotent,142 411 lignes importées,ETL
+Terminé,Routes /trajets /trajets/{id} /stats/volumes /health,,Backend
+Terminé,Frontend tableau de bord,142 411 trajets affichés,Frontend
+Terminé,Filtres et pagination frontend,,Frontend
+Terminé,Accessibilité RGAA intégrée,,Frontend
+Terminé,Dockerfiles backend et frontend,,Docker
+Terminé,Docker Compose 8 services,,Docker
+Terminé,entrypoint.sh,,Docker
+Terminé,12 tests Pytest — tous passent,,Tests
+Terminé,4 tests Playwright — tous passent,,Tests
+Terminé,Pipeline CI/CD 4 jobs opérationnel,,CI/CD
+Terminé,Prometheus opérationnel,,Monitoring
+Terminé,Grafana dashboard auto-provisionné,,Monitoring
+Terminé,Loki 185 logs collectés,,Monitoring
+Terminé,Rapport technique soumis,,Documentation
+Terminé,README pushé sur GitHub,,Documentation

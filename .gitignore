@@ -1,0 +1,27 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.db
+logs/
+coverage/
+playwright-report/
+test-results/
+.DS_Store
+
+# artefacts de test locaux (tokens, réponses API) — jamais commités
+admin.json
+admin.txt
+token.json
+token.txt
+co2.json
+substitution.json
