@@ -1,0 +1,258 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend - FastAPI tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Secret de signature dedie a la CI. En production il proviendrait de
+    # ${{ secrets.JWT_SECRET_KEY }} ; ici la valeur n ouvre acces a rien.
+    env:
+      JWT_SECRET_KEY: ci-secret-key-not-for-production
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: obrail
+          POSTGRES_PASSWORD: obrail
+          POSTGRES_DB: obrail
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      - name: Check required dataset and models
+        run: |
+          test -f data/eu_trips_v2.csv
+          test -f models/classification_substitution_avion.joblib
+          test -f models/encoders.joblib
+          test -f models/regression_co2.joblib
+
+      - name: Compile backend package
+        run: python -m compileall backend/app
+
+      - name: Seed database
+        env:
+          DATABASE_URL: postgresql://obrail:obrail@localhost:5432/obrail
+          CSV_PATH: data/eu_trips_v2.csv
+        run: python backend/seed.py
+
+      - name: Run backend tests
+        run: python -m pytest -q backend/tests
+
+  frontend:
+    name: Frontend - Vite tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  docker:
+    name: Docker - Compose validation and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - backend
+      - frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate compose file
+        run: docker compose -f docker/docker-compose.yml config --quiet
+
+      - name: Build backend and frontend images
+        run: docker compose -f docker/docker-compose.yml build
+
+  e2e:
+    name: E2E - Playwright browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - backend
+      - frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend and Playwright dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Start Docker stack
+        run: docker compose -f docker/docker-compose.yml up -d --build frontend
+
+      - name: Run Playwright E2E tests
+        run: python -m pytest -q frontend/tests/test_e2e.py
+
+      - name: Show Docker logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.yml logs --tail=120
+
+      - name: Stop Docker stack
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down
+
+  model:
+    name: Model - Validation des donnees et du modele
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      # Validation du jeu de donnees, des etapes de preparation, d entrainement
+      # et d evaluation du modele. Un modele qui ne passe pas ses garde-fous de
+      # non-regression ne doit pas etre livre : ce job precede la publication.
+      - name: Run model pipeline tests
+        run: python -m pytest ml/tests -v
+
+  publish:
+    name: Publish - Images sur GitHub Container Registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Etape de livraison : elle ne s execute qu une fois le packaging valide.
+    # `needs` garantit que les tests backend, frontend, E2E et la construction
+    # des images sont tous passes au vert avant toute publication.
+    needs:
+      - backend
+      - frontend
+      - docker
+      - e2e
+      - model
+
+    # Publication uniquement sur la branche principale : une pull request est
+    # testee et construite, mais ne publie rien. Cela evite de diffuser une
+    # image issue de code non revu.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Moindre privilege : le droit d ecriture sur les packages est accorde a ce
+    # seul job, le reste du workflow reste en lecture seule (OWASP A05).
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Le proprietaire du depot sert de namespace ; il est mis en minuscules
+      # car ghcr.io refuse les majuscules dans un nom d image.
+      - name: Compute image namespace
+        id: ns
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.ns.outputs.owner }}/obrail-backend:latest
+            ghcr.io/${{ steps.ns.outputs.owner }}/obrail-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.ns.outputs.owner }}/obrail-frontend:latest
+            ghcr.io/${{ steps.ns.outputs.owner }}/obrail-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Recapitulatif de la livraison
+        run: |
+          echo "### Images publiees" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | Tags |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| obrail-backend | \`latest\`, \`${GITHUB_SHA::7}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| obrail-frontend | \`latest\`, \`${GITHUB_SHA::7}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Recuperation : \`docker pull ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/obrail-backend:latest\`" >> "$GITHUB_STEP_SUMMARY"
