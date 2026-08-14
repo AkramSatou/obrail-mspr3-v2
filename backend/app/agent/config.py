@@ -31,7 +31,7 @@ def charger_config() -> ConfigAgent:
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         model_ollama=os.getenv("OBRAIL_LLM_MODEL_OLLAMA", "qwen3:8b"),
         model_openrouter=os.getenv(
-            "OBRAIL_LLM_MODEL_OPENROUTER", "meta-llama/llama-3.3-70b-instruct:free"
+            "OBRAIL_LLM_MODEL_OPENROUTER", "openai/gpt-4o-mini"
         ),
         ollama_base_url=os.getenv(
             "OLLAMA_BASE_URL", "http://host.docker.internal:11434/v1"

@@ -39,7 +39,7 @@ def test_config_defauts(monkeypatch):
     assert cfg.provider == "auto"
     assert cfg.openrouter_api_key == ""
     assert cfg.model_ollama == "qwen3:8b"
-    assert cfg.model_openrouter == "meta-llama/llama-3.3-70b-instruct:free"
+    assert cfg.model_openrouter == "openai/gpt-4o-mini"
     assert cfg.ollama_base_url == "http://host.docker.internal:11434/v1"
     assert cfg.auto_timeout_s == 1.5
     assert cfg.auto_cache_s == 45
