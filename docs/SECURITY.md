@@ -46,8 +46,18 @@ Le compte est revalidé en base à chaque renouvellement : désactiver un utilis
 | `POST /predict` | 401 | **403** | oui |
 | `POST /predict/substitution` | 401 | **403** | oui |
 | `POST /predict/co2` | 401 | **403** | oui |
+| `POST /agent/chat` | 401 | **403** | oui |
+| `GET /agent/info` | 401 | **403** | oui |
 
 La distinction **401 / 403** est volontaire : `401` signifie « non authentifié », `403` « authentifié mais non habilité ».
+
+### Règle D5 — isolation de l'agent IA
+
+Les routes `/agent/*` sont réservées au rôle `admin` via `require_role(ROLE_ADMIN)`. Cette règle est appliquée côté serveur avant toute exécution de la boucle agent :
+
+- Un utilisateur `viewer` reçoit un `403 Forbidden` avant que le moindre outil ou modèle de prédiction ne soit invoqué.
+- L'agent ne peut donc pas servir de vecteur d'accès indirect aux routes de prédiction (`/predict/*`) pour un compte viewer.
+- L'interface frontend affiche un message d'accès refusé côté client (confort UX) — ce n'est pas la garde de sécurité réelle, qui reste côté serveur.
 
 ### Pourquoi trois routes restent publiques
 
@@ -104,7 +114,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 | **A07 — Identification & Authentication Failures** | Couvert | Jetons à durée de vie courte, renouvellement explicite, comptes désactivables, messages d'erreur non discriminants. Limitation en mémoire : 5 tentatives échouées par identifiant ou par adresse IP entraînent un blocage de 15 minutes (HTTP 429). Seuils configurables via `LOGIN_MAX_ATTEMPTS` et `LOGIN_LOCKOUT_SECONDS`. |
 | **A08 — Software & Data Integrity Failures** | Partiel | Images construites **et publiées** par la CI à partir de Dockerfiles versionnés, uniquement après succès des tests backend, frontend, E2E et de la construction. Chaque image porte le SHA du commit qui l'a produite, ce qui rend la traçabilité artefact → source exacte. Droit d'écriture sur le registre limité au seul job `publish` (moindre privilège). Dépendances épinglées. **Écart : pas de signature d'image (cosign)** |
 | **A09 — Security Logging & Monitoring Failures** | Couvert | Succès et échecs d'authentification journalisés avec l'identifiant tenté, jamais le mot de passe. Logs centralisés dans Loki, métriques Prometheus, tableau de bord Grafana |
-| **A10 — Server-Side Request Forgery** | Sans objet | L'API n'effectue aucune requête sortante à partir d'une URL fournie par l'utilisateur |
+| **A10 — Server-Side Request Forgery** | Couvert | L'agent IA n'accepte que des appels aux fonctions Python internes (contrainte D4 — pas d'URL dynamique issue du message utilisateur). L'URL du fournisseur LLM est configurée par variable d'environnement, pas par l'entrée utilisateur |
 
 **Lecture honnête de ce tableau :** cinq risques sont couverts, quatre partiellement avec un écart identifié et justifié, un est sans objet. Les écarts restants relèvent tous d'un déploiement en production réelle, hors du périmètre d'une démonstration locale — mais ils sont connus, pas subis.
 

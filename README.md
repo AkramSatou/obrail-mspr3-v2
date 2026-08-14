@@ -117,6 +117,43 @@ curl -s -X POST http://localhost:8000/auth/login -d "username=viewer&password=vi
 
 ---
 
+## Agent IA (C8 — RNCP 37827)
+
+L'interface intègre un assistant conversationnel ferroviaire accessible depuis l'onglet **Assistant IA** (compte `admin` requis).
+
+### Fonctionnement
+
+L'agent implémente une boucle `réfléchir → agir → observer` sans LangChain. À chaque message, il choisit parmi quatre outils métier (statistiques, recherche de trajets, substitution avion, CO2) et retourne une réponse factuelle basée **uniquement** sur les données ObRail — jamais une estimation inventée.
+
+### Modes LLM
+
+| Mode | Description | Variable |
+|---|---|---|
+| `auto` (défaut) | Ping OpenRouter → Ollama → rejeu | `OBRAIL_LLM_PROVIDER=auto` |
+| `ollama` | Instance Ollama locale (modèle `qwen3:8b`) | `OBRAIL_LLM_PROVIDER=ollama` |
+| `openrouter` | API distante (modèle `meta-llama/llama-3.1-8b-instruct:free`) | `OBRAIL_LLM_PROVIDER=openrouter` |
+| `rejeu` | Démonstration hors-ligne, traces pré-enregistrées | `OBRAIL_LLM_PROVIDER=rejeu` |
+
+### Démonstration hors-ligne (recommandé en soutenance)
+
+```bash
+# Lancer avec le mode rejeu pour ne pas dépendre du réseau
+OBRAIL_LLM_PROVIDER=rejeu docker compose -f docker/docker-compose.yml up --build
+
+# Tester directement via curl
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -d "username=admin&password=admin123" | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+curl -s -X POST http://localhost:8000/agent/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Combien de trajets electriques recense-t-on en France ?"}' | python -m json.tool
+```
+
+Documentation complète : **[docs/AGENT_IA.md](docs/AGENT_IA.md)**
+
+---
+
 ## Vérification rapide
 
 ```bash
@@ -139,7 +176,7 @@ curl http://localhost:8000/stats/volumes
 ```bash
 pip install psycopg2-binary python-logging-loki
 python -m pytest backend/tests/ -v
-# Résultat attendu : 39 passed (12 tests de données + 27 tests d'authentification)
+# Résultat attendu : ~102 passed (tests données + auth + agent chat + agent rejeu)
 ```
 
 ### Tests du pipeline de modélisation
@@ -162,7 +199,7 @@ Le frontend doit être démarré avant de lancer les tests E2E.
 pip install playwright
 playwright install chromium
 python -m pytest frontend/tests/test_e2e.py -v
-# Résultat attendu : 7 passed (4 tests initiaux + 3 tests de connexion)
+# Résultat attendu : 10 passed (7 tests initiaux + 3 tests onglets/agent)
 ```
 
 ---
@@ -173,22 +210,23 @@ python -m pytest frontend/tests/test_e2e.py -v
 obrail-mspr3/
 ├── backend/              API FastAPI, modèles ORM, tests Pytest
 │   ├── app/
-│   │   ├── main.py       Routes API, modèles IA, monitoring
+│   │   ├── main.py       Routes API, modèles IA, monitoring, agent
 │   │   ├── database.py   Connexion SQLAlchemy
-│   │   └── models.py     Modèle Trip (24 colonnes)
-│   │   └── security.py   JWT, hachage bcrypt, dépendances d'autorisation
-│   ├── tests/            39 tests unitaires, d'intégration et d'authentification
+│   │   ├── models.py     Modèle Trip (24 colonnes)
+│   │   ├── security.py   JWT, hachage bcrypt, dépendances d'autorisation
+│   │   └── agent/        Boucle agent, fournisseurs LLM, outils, rejeu
+│   ├── tests/            ~102 tests (données, auth, agent chat, agent rejeu)
 │   ├── seed.py           Import CSV → PostgreSQL
 │   └── seed_users.py     Création idempotente des comptes applicatifs
-├── frontend/             Interface React/Vite
-│   └── tests/            4 tests E2E Playwright
+├── frontend/             Interface React/Vite (3 onglets : tableau, trajets, assistant)
+│   └── tests/            10 tests E2E Playwright
 ├── data/                 Dataset eu_trips_v2.csv (142 420 lignes)
 ├── models/               Modèles IA (.joblib)
 ├── docker/               docker-compose.yml (8 services)
 ├── monitoring/           Prometheus, Grafana, Loki, Promtail
 ├── scripts/              entrypoint.sh, preuve_postgresql.sh
 ├── ml/                   Validation des données et tests du modèle
-├── docs/                 SECURITY.md et journal des incidents
+├── docs/                 SECURITY.md, AGENT_IA.md et journal des incidents
 ├── .github/workflows/    Pipeline CI/CD GitHub Actions
 └── RAPPORT_TECHNIQUE.md  Documentation technique complète
 ```
@@ -237,7 +275,7 @@ Le double tag `latest` + SHA permet de remonter de n'importe quelle image déplo
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic |
 | Base de données | PostgreSQL 15 |
 | Frontend | React, Vite |
-| IA | XGBoost, scikit-learn, joblib |
+| IA | XGBoost, scikit-learn, joblib, agent LLM (OpenRouter / Ollama) |
 | Conteneurisation | Docker, Docker Compose |
 | CI/CD | GitHub Actions |
 | Monitoring | Prometheus, Grafana, Loki, Promtail |
@@ -247,4 +285,9 @@ Le double tag `latest` + SHA permet de remonter de n'importe quelle image déplo
 
 ## Documentation
 
-La documentation technique complète est disponible dans [RAPPORT_TECHNIQUE.md](./RAPPORT_TECHNIQUE.md).
+| Document | Contenu |
+|---|---|
+| [RAPPORT_TECHNIQUE.md](./RAPPORT_TECHNIQUE.md) | Documentation technique complète |
+| [docs/SECURITY.md](docs/SECURITY.md) | Authentification, matrice des droits, OWASP Top 10 |
+| [docs/AGENT_IA.md](docs/AGENT_IA.md) | Agent IA — architecture, outils, modes LLM, rejeu (C8) |
+| [docs/INCIDENT-002-scaler-inference.md](docs/INCIDENT-002-scaler-inference.md) | Post-mortem correctif StandardScaler XGBoost |

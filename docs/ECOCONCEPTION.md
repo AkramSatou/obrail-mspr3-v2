@@ -165,6 +165,53 @@ détecte toujours une déconnexion dans les 30s, sans coût notable.
 
 ---
 
+## 4b. Routes Agent IA (ajout post-étape C)
+
+Les routes `/agent/chat` (POST) et `/agent/info` (GET) sont couvertes par le
+`GZipMiddleware` existant (minimum_size=500 octets) — aucun changement de code nécessaire.
+
+### Payload `/agent/chat`
+
+| Cas | Taille brute estimée | Après gzip | Note |
+|---|---|---|---|
+| Mode rejeu (1 outil, trace simple) | ~800 o | ~340 o | Similaire à /stats/volumes |
+| Mode direct (3 itérations, 2 outils) | ~3 500 o | ~900 o | Trace JSON complète avec arguments et résumés |
+| Mode direct (5 itérations, réponse longue) | ~6 000 o | ~1 500 o | Cas observé en session qwen3:8b |
+
+**GZip s'applique automatiquement** — la trace d'agent (champs `trace`, `reponse`, `session_id`, etc.)
+dépasse systématiquement 500 octets, le seuil du middleware.
+
+### Cache
+
+`/agent/chat` ne reçoit **pas** d'en-tête `Cache-Control` — chaque question produit une réponse
+différente. C'est intentionnel.
+
+`/agent/info` retourne la configuration statique (fournisseur, modèle, outils). Une mise en cache
+courte (30 s) serait justifiable mais n'est pas implémentée : la route est peu appelée
+(1 fois au montage du composant AssistantIA).
+
+### Fréquence d'appels — impact frontend
+
+Avant la correction de l'étape correction-2 (2026-08-14) :
+- `/agent/chat` : appelé uniquement à l'envoi de message (0 requête à vide)
+- `/agent/info` : **non appelé** — badge mode absent avant premier message
+
+Après correction :
+- `/agent/info` : **1 appel au montage** de AssistantIA (ouverture onglet) — nécessaire pour
+  afficher le badge de mode avant le premier message. Surcoût : 1 requête de ~200 o par ouverture
+  d'onglet.
+
+### Conformité référentielle
+
+| Critère | Règle | Statut |
+|---|---|---|
+| RGESN R3.5 | Compresser les ressources transférées | Couvert via GZipMiddleware |
+| RGESN R4.2 | Mettre en cache les données peu changeantes | `/agent/info` : non mis en cache (faible fréquence) |
+| RGESN R1.8 | Limiter les requêtes JavaScript | 1 requête /agent/info à l'ouverture d'onglet, pas de polling |
+| OWASP A10 | SSRF / injection côté serveur | Les outils (D4) n'effectuent aucun appel HTTP externe — que des requêtes SQL et appels ML locaux |
+
+---
+
 ## 5. Recommandations non implémentées
 
 ### 5.1 Champs API inutilisés dans `/trajets` (recommandation C15)
