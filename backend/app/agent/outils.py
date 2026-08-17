@@ -14,9 +14,12 @@ _model_substitution, _build_co2_df, _model_co2) — aucune logique d'inférence
 n'est dupliquée ici.
 """
 
+import logging
 from typing import Callable, Optional
 
 from pydantic import BaseModel, Field, ValidationError
+
+logger = logging.getLogger("obrail.agent.outils")
 
 from app import main as _main
 from app.database import SessionLocal
@@ -44,6 +47,28 @@ def _erreur_co2() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Helpers internes
+# ---------------------------------------------------------------------------
+
+
+def _n_stops_entier(trip_id: str, valeur: float) -> int:
+    """Convertit n_stops Float → int par arrondi.
+
+    n_stops est stocké comme Float en base (artifact du modèle ORM) mais doit
+    toujours représenter un entier. On arrondit au lieu de tronquer pour éviter
+    1.9 → 1. Si la valeur n'est pas entière-like, on émet un warning — cela
+    signale une anomalie de données, pas un comportement attendu.
+    """
+    arrondi = int(round(valeur))
+    if abs(valeur - arrondi) > 0.01:
+        logger.warning(
+            "n_stops non entier détecté (trip_id=%s, valeur=%.4f) — arrondi à %d",
+            trip_id, valeur, arrondi,
+        )
+    return arrondi
+
+
+# ---------------------------------------------------------------------------
 # Outil 1 — rechercher_trajets
 # ---------------------------------------------------------------------------
 
@@ -67,9 +92,14 @@ SCHEMA_RECHERCHER_TRAJETS = {
         "description": (
             "Recherche des trajets ferroviaires dans l'observatoire ObRail selon "
             "des critères optionnels (origine, destination, pays, type de train, "
-            "plage de distance). Utilise cet outil pour trouver un ou plusieurs "
-            "trajets réels avant de répondre à une question sur une liaison "
-            "précise."
+            "plage de distance). Retourne pour chaque trajet ses paramètres réels "
+            "(distance_km, duration_minutes, n_stops, type_train, country, "
+            "consommation_energy, gco2_per_kwh, consommation_totale, co2_estime). "
+            "Utilise cet outil TOUJOURS en premier pour toute question sur une liaison "
+            "nommée, afin d'obtenir les paramètres réels avant d'appeler un outil de "
+            "prédiction. Les champs country, co2_estime, consommation_energy et "
+            "gco2_per_kwh peuvent être passés directement à predire_substitution_avion "
+            "ou estimer_co2_futur sans conversion."
         ),
         "parameters": {
             "type": "object",
@@ -127,13 +157,15 @@ def rechercher_trajets(
                 "route_long_name": row.route_long_name,
                 "origine": row.origin_stop_name,
                 "destination": row.destination_stop_name,
-                "pays": row.country,
+                "country": row.country,
                 "type_train": row.type_train,
                 "distance_km": float(row.distance_km),
                 "duration_minutes": float(row.duration_minutes),
-                "n_stops": int(row.n_stops),
-                "co2_estime_g": float(row.co2_estime) if row.co2_estime is not None else None,
+                "n_stops": _n_stops_entier(row.trip_id, row.n_stops),
+                "co2_estime": float(row.co2_estime) if row.co2_estime is not None else None,
                 "consommation_totale": float(row.consommation_totale) if row.consommation_totale is not None else None,
+                "consommation_energy": float(row.consommation_energy),
+                "gco2_per_kwh": float(row.gco2_per_kwh),
             }
             for row in rows
         ]
@@ -311,10 +343,13 @@ SCHEMA_ESTIMER_CO2_FUTUR = {
     "function": {
         "name": "estimer_co2_futur",
         "description": (
-            "Estime les émissions CO2 futures (en kgCO2) d'une liaison ferroviaire "
-            "selon un scénario de développement du réseau. Utilise TOUJOURS cet "
-            "outil pour toute question d'émission de CO2 future — n'estime jamais "
-            "toi-même un chiffre."
+            "Projection de scénario réseau : estime les émissions CO2 futures (en kgCO2) "
+            "d'une liaison ferroviaire selon un scénario de développement du réseau. "
+            "Utilise TOUJOURS cet outil pour toute question d'émission de CO2 future — "
+            "n'estime jamais toi-même un chiffre. "
+            "IMPORTANT : les paramètres consommation_energy et gco2_per_kwh doivent "
+            "provenir d'un trajet réel obtenu préalablement via rechercher_trajets. "
+            "Ne suppose jamais ces valeurs — si aucun trajet ne correspond, dis-le."
         ),
         "parameters": {
             "type": "object",
@@ -322,8 +357,22 @@ SCHEMA_ESTIMER_CO2_FUTUR = {
                 "distance_km": {"type": "number", "description": "Distance géographique de la liaison en km"},
                 "duration_minutes": {"type": "number", "description": "Durée du trajet en minutes"},
                 "n_stops": {"type": "integer", "description": "Nombre d'arrêts intermédiaires"},
-                "consommation_energy": {"type": "number", "description": "Consommation énergétique en kWh/km"},
-                "gco2_per_kwh": {"type": "number", "description": "Facteur carbone du pays en gCO2/kWh"},
+                "consommation_energy": {
+                    "type": "number",
+                    "description": (
+                        "Consommation énergétique en kWh/km — "
+                        "valeur réelle issue du champ 'consommation_energy' retourné par rechercher_trajets, "
+                        "jamais estimée par le modèle"
+                    ),
+                },
+                "gco2_per_kwh": {
+                    "type": "number",
+                    "description": (
+                        "Facteur carbone du pays en gCO2/kWh — "
+                        "valeur réelle issue du champ 'gco2_per_kwh' retourné par rechercher_trajets, "
+                        "jamais estimée par le modèle"
+                    ),
+                },
                 "consommation_totale": {"type": "number", "description": "Consommation totale actuelle en kWh"},
                 "type_train": {"type": "string", "enum": ["electric", "diesel"], "description": "Type de traction"},
                 "scenario": {
@@ -375,7 +424,12 @@ def estimer_co2_futur(
     return {
         "scenario": scenario,
         "co2_estime_kg": round(co2_predit, 4),
-        "label": f"CO2 estimé : {co2_predit:.2f} kgCO2 (scénario : {scenario})",
+        "label": (
+            f"Projection de scénario réseau — CO2 estimé : {co2_predit:.2f} kgCO2 "
+            f"(scénario : {scenario}). "
+            "Note : cette valeur est une projection ML à l'échelle du réseau, "
+            "distincte de l'estimation instantanée par facteur kilométrique."
+        ),
         "resultat_resume": f"co2_estime_kg={round(co2_predit, 4)} (scénario {scenario})",
     }
 
