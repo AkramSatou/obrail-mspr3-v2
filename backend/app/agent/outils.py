@@ -92,9 +92,14 @@ SCHEMA_RECHERCHER_TRAJETS = {
         "description": (
             "Recherche des trajets ferroviaires dans l'observatoire ObRail selon "
             "des critères optionnels (origine, destination, pays, type de train, "
-            "plage de distance). Retourne pour chaque trajet ses paramètres réels "
-            "(distance_km, duration_minutes, n_stops, type_train, country, "
-            "consommation_energy, gco2_per_kwh, consommation_totale, co2_estime). "
+            "plage de distance). Retourne pour chaque trajet ses paramètres réels : "
+            "distance_km, duration_minutes, n_stops, type_train, country, "
+            "consommation_energy, gco2_per_kwh, consommation_totale, "
+            "co2_estime (gCO2, total du train complet pour UN trajet enregistré — "
+            "pas une estimation par passager), "
+            "co2_estime_kg (même valeur convertie en kgCO2, 1 décimale). "
+            "ATTENTION : plusieurs trajets peuvent exister pour la même liaison — "
+            "si c'est le cas, signale-le en disant 'un trajet parmi d'autres'. "
             "Utilise cet outil TOUJOURS en premier pour toute question sur une liaison "
             "nommée, afin d'obtenir les paramètres réels avant d'appeler un outil de "
             "prédiction. Les champs country, co2_estime, consommation_energy et "
@@ -163,6 +168,7 @@ def rechercher_trajets(
                 "duration_minutes": float(row.duration_minutes),
                 "n_stops": _n_stops_entier(row.trip_id, row.n_stops),
                 "co2_estime": float(row.co2_estime) if row.co2_estime is not None else None,
+                "co2_estime_kg": round(float(row.co2_estime) / 1000, 1) if row.co2_estime is not None else None,
                 "consommation_totale": float(row.consommation_totale) if row.consommation_totale is not None else None,
                 "consommation_energy": float(row.consommation_energy),
                 "gco2_per_kwh": float(row.gco2_per_kwh),
