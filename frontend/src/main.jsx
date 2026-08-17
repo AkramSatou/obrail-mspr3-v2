@@ -86,20 +86,26 @@ function App({ onLogout }) {
 
   /* Chat state lifted here so it survives tab switches */
   const [chatMessages, setChatMessages] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("obrail.chat.current") || "[]"); } catch { return []; }
+    const u = getUsername() || "anonymous";
+    // Delete legacy global keys — no migration to avoid cross-user history leakage.
+    ["obrail.chat.current", "obrail.chat.sessionid", "obrail.chat.history", "obrail.chat.counter"]
+      .forEach(k => localStorage.removeItem(k));
+    try { return JSON.parse(localStorage.getItem(`obrail.chat.current.${u}`) || "[]"); } catch { return []; }
   });
-  const [chatSessionId, setChatSessionId] = useState(() =>
-    localStorage.getItem("obrail.chat.sessionid") || null
-  );
+  const [chatSessionId, setChatSessionId] = useState(() => {
+    const u = getUsername() || "anonymous";
+    return localStorage.getItem(`obrail.chat.sessionid.${u}`) || null;
+  });
   const [chatEnAttente, setChatEnAttente] = useState(false);
   const [chatBadgeFournisseur, setChatBadgeFournisseur] = useState(null);
   const [chatHistory, setChatHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("obrail.chat.history") || "[]"); } catch { return []; }
+    const u = getUsername() || "anonymous";
+    try { return JSON.parse(localStorage.getItem(`obrail.chat.history.${u}`) || "[]"); } catch { return []; }
   });
 
-  useEffect(() => { localStorage.setItem("obrail.chat.current", JSON.stringify(chatMessages)); }, [chatMessages]);
-  useEffect(() => { if (chatSessionId) localStorage.setItem("obrail.chat.sessionid", chatSessionId); }, [chatSessionId]);
-  useEffect(() => { localStorage.setItem("obrail.chat.history", JSON.stringify(chatHistory)); }, [chatHistory]);
+  useEffect(() => { const u = getUsername() || "anonymous"; localStorage.setItem(`obrail.chat.current.${u}`, JSON.stringify(chatMessages)); }, [chatMessages]);
+  useEffect(() => { const u = getUsername() || "anonymous"; if (chatSessionId) localStorage.setItem(`obrail.chat.sessionid.${u}`, chatSessionId); }, [chatSessionId]);
+  useEffect(() => { const u = getUsername() || "anonymous"; localStorage.setItem(`obrail.chat.history.${u}`, JSON.stringify(chatHistory)); }, [chatHistory]);
   const [page, setPage] = useState(1);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [tripsLoading, setTripsLoading] = useState(true);
@@ -688,9 +694,10 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
   const [fournisseurChoisi, setFournisseurChoisi] = useState("auto");
   const [editingId, setEditingId] = useState(null);
   const [editingTitre, setEditingTitre] = useState("");
-  const [convCounter, setConvCounter] = useState(() =>
-    parseInt(localStorage.getItem("obrail.chat.counter") || "1", 10)
-  );
+  const [convCounter, setConvCounter] = useState(() => {
+    const u = getUsername() || "anonymous";
+    return parseInt(localStorage.getItem(`obrail.chat.counter.${u}`) || "1", 10);
+  });
   // null = nouvelle conversation non sauvegardée ; id = conversation de l'historique active
   const [activeConvId, setActiveConvId] = useState(null);
   const bottomRef = useRef(null);
@@ -743,7 +750,7 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
       setChatHistory(prev => [{ id: Date.now(), titre: `Conversation ${num}`, date, messages: [...messages] }, ...prev].slice(0, 30));
       const next = num + 1;
       setConvCounter(next);
-      localStorage.setItem("obrail.chat.counter", String(next));
+      localStorage.setItem(`obrail.chat.counter.${getUsername() || "anonymous"}`, String(next));
     }
   }
 
@@ -753,8 +760,9 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
     setMessages([]);
     setSessionId(null);
     setBadgeFournisseur(null);
-    localStorage.removeItem("obrail.chat.current");
-    localStorage.removeItem("obrail.chat.sessionid");
+    const u = getUsername() || "anonymous";
+    localStorage.removeItem(`obrail.chat.current.${u}`);
+    localStorage.removeItem(`obrail.chat.sessionid.${u}`);
   }
 
   function restaurer(item) {
@@ -769,8 +777,9 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
     });
     setSessionId(null);
     setBadgeFournisseur(null);
-    localStorage.removeItem("obrail.chat.current");
-    localStorage.removeItem("obrail.chat.sessionid");
+    const u = getUsername() || "anonymous";
+    localStorage.removeItem(`obrail.chat.current.${u}`);
+    localStorage.removeItem(`obrail.chat.sessionid.${u}`);
   }
 
   function supprimerHistorique(id, e) {
