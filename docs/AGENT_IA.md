@@ -54,7 +54,7 @@ Les outils appellent directement les fonctions Python internes ; ils ne passent 
 | Nom de l'outil | Fonction Python | Description |
 |---|---|---|
 | `obtenir_statistiques` | `app.agent.outils` | Statistiques agrégées (trajets, km, CO2) filtrable par pays/type |
-| `rechercher_trajets` | `app.agent.outils` | Recherche de trajets avec filtres (origine, destination, pays) |
+| `rechercher_trajets` | `app.agent.outils` | Recherche de trajets avec filtres (origine, destination, pays) — retourne les paramètres réels du trajet dont `consommation_energy` et `gco2_per_kwh`, requis par `estimer_co2_futur` |
 | `predire_substitution_avion` | `app.agent.outils` | Prédit si un trajet est substituable à l'avion (modèle XGBoost) |
 | `estimer_co2_futur` | `app.agent.outils` | Régression CO2 sur une distance donnée |
 

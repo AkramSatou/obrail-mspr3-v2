@@ -281,8 +281,9 @@ Les 3 nouveaux tests E2E nécessitent :
 
 **Preuve directe — chaîne complète dans le conteneur :**
 ```
-Champs retournes: ['id', 'route_long_name', 'origine', 'destination', 'pays', 'type_train',
-                   'distance_km', 'duration_minutes', 'n_stops', 'co2_estime_g', 'consommation_totale']
+Champs retournes: ['id', 'route_long_name', 'origine', 'destination', 'country', 'type_train',
+                   'distance_km', 'duration_minutes', 'n_stops', 'co2_estime', 'consommation_totale',
+                   'consommation_energy', 'gco2_per_kwh']
 consommation_totale: 13166.785
 
 predire_substitution_avion REUSSI: {"substitution_avion": 1, "probabilite": 1.0,

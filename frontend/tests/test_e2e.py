@@ -59,7 +59,7 @@ def test_page_charge_et_affiche_les_donnees():
         page = browser.new_page()
         open_dashboard(page)
 
-        expect(page.get_by_text("ObRail Europe").first).to_be_visible(timeout=TIMEOUT_MS)
+        expect(page.locator(".app-logo-text")).to_be_visible(timeout=TIMEOUT_MS)
         expect(page.locator(".metric-card").first).to_contain_text("142", timeout=TIMEOUT_MS)
 
         browser.close()
@@ -103,7 +103,7 @@ def test_api_health_visible_dans_le_frontend():
         page = browser.new_page()
         open_dashboard(page)
 
-        expect(page.get_by_text("API operationnelle")).to_be_visible(timeout=TIMEOUT_MS)
+        expect(page.locator('[title="API opérationnelle"]')).to_be_visible(timeout=TIMEOUT_MS)
 
         browser.close()
 

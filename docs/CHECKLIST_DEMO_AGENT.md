@@ -83,7 +83,7 @@ Note : qwen3:8b active le mode « thinking » (raisonnement long) même à tempe
 **Trace :** 2 appels outils (`rechercher_trajets` puis `predire_substitution_avion`), 2 itérations  
 **Durée mesurée :** 12 ms (rejeu) / 365 s (Ollama — thinking mode)
 
-**Note Ollama :** en mode live, l'appel `predire_substitution_avion` peut échouer Pydantic car `consommation_totale` n'est pas retourné par `rechercher_trajets`. Le modèle signale alors les données manquantes (comportement §0.6-1 — aucune réponse inventée). Pour une démo Ollama fiable sur cette question, utiliser la question Q3 à la place.
+**Note Ollama :** depuis INCIDENT-004 (corrigé le 17/08/2026), `rechercher_trajets` retourne désormais `consommation_energy` et `gco2_per_kwh`. Tous les paramètres requis par `predire_substitution_avion` et `estimer_co2_futur` sont présents dans la réponse de `rechercher_trajets` — le LLM n'a plus besoin d'inventer de valeurs. La démo Ollama live sur Q2 devrait fonctionner correctement.
 
 ---
 
