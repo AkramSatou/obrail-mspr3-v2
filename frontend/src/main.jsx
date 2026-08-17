@@ -809,8 +809,8 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
   return (
     <div className="assistant-shell" role="region" aria-label="Assistant IA ObRail">
 
-      {/* Sidebar historique */}
-      <div className="chat-sidebar">
+      {/* Sidebar historique — réservée aux admins comme le reste du composant */}
+      {estAdmin && <div className="chat-sidebar">
         <div className="chat-sidebar-header">
           <span>Historique</span>
           <button className="chat-sidebar-new" onClick={effacer} disabled={!messages.length || enAttente} title="Sauvegarder et nouveau chat">
@@ -872,7 +872,7 @@ function AssistantIA({ messages, setMessages, sessionId, setSessionId, enAttente
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Colonne principale */}
       <div className="chat-main">
