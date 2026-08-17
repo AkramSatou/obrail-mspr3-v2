@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000
 const ACCESS_KEY = "obrail.access_token";
 const REFRESH_KEY = "obrail.refresh_token";
 const ROLE_KEY = "obrail.role";
+const USERNAME_KEY = "obrail.username";
 
 // Acces defensif : sessionStorage n existe pas sous Node (tests unitaires Vitest),
 // ni lorsque le navigateur bloque le stockage. Le module doit rester importable.
@@ -45,11 +46,16 @@ export function isAuthenticated() {
   return Boolean(accessToken);
 }
 
-function storeSession({ access_token, refresh_token, role }) {
+function storeSession({ access_token, refresh_token, role }, username = null) {
   accessToken = access_token;
   store.set(ACCESS_KEY, access_token);
   store.set(REFRESH_KEY, refresh_token);
   store.set(ROLE_KEY, role);
+  if (username) store.set(USERNAME_KEY, username);
+}
+
+export function getUsername() {
+  return store.get(USERNAME_KEY);
 }
 
 export function logout() {
@@ -88,7 +94,7 @@ export async function login(username, password) {
     throw new AuthError("Identifiants invalides.");
   }
   const payload = await response.json();
-  storeSession(payload);
+  storeSession(payload, username);
   return payload;
 }
 
@@ -184,8 +190,10 @@ export function fetchCurrentUser() {
   return requestJson("/auth/me");
 }
 
-export function envoyerMessageAgent(message, sessionId = null) {
-  const corps = sessionId ? { message, session_id: sessionId } : { message };
+export function envoyerMessageAgent(message, sessionId = null, fournisseurForce = null) {
+  const corps = { message };
+  if (sessionId) corps.session_id = sessionId;
+  if (fournisseurForce && fournisseurForce !== "auto") corps.fournisseur_force = fournisseurForce;
   return requestJson("/agent/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -195,4 +203,25 @@ export function envoyerMessageAgent(message, sessionId = null) {
 
 export function fetchAgentInfo() {
   return requestJson("/agent/info");
+}
+
+export function predictSubstitution(data) {
+  return requestJson("/predict/substitution", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function predictCO2Futur(data) {
+  return requestJson("/predict/co2", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function geocoderTrajet(origine, destination, type_train = "electric") {
+  const params = new URLSearchParams({ origine, destination, type_train });
+  return requestJson(`/geocode?${params}`);
 }
