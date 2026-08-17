@@ -1,0 +1,100 @@
+# .github/workflows/model-retrain.yml
+#
+# Workflow MLOps — réentraînement et promotion du modèle de substitution.
+#
+# Déclenchement manuel (workflow_dispatch) et non sur chaque push :
+#   Le jeu de données eu_trips_v2.csv n'évolue pas à chaque commit de code.
+#   Déclencher un réentraînement (~30 min) à chaque push serait coûteux sans
+#   valeur ajoutée. La CI existante (ci.yml, job "model") vérifie déjà que le
+#   code ne casse pas le modèle statique livré.
+#   Ce workflow est déclenché manuellement par un data scientist ou sur cron
+#   hebdomadaire si le dataset est alimenté par un pipeline amont automatique.
+#
+# Références :
+#   workflow_dispatch : https://docs.github.com/en/actions/using-workflows/manually-running-a-workflow
+#   schedule          : https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
+
+name: "MLOps — Réentraînement du modèle"
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Motif du réentraînement (ex : nouveau dataset, ajustement hyperparamètres)"
+        required: false
+        default: "Réentraînement manuel"
+  schedule:
+    # Chaque dimanche à 02:00 UTC — filet de sécurité hebdomadaire
+    - cron: "0 2 * * 0"
+
+jobs:
+  retrain:
+    name: "Entraînement · Validation · Promotion"
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    permissions:
+      contents: write  # nécessaire pour git push des artefacts promus
+
+    steps:
+      - name: Checkout (historique complet pour git rev-parse)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      # Garde-fou rapide sur le schéma des données avant de lancer l'entraînement
+      - name: Valider le schéma du jeu de données
+        run: python -m pytest ml/tests/test_dataset_validation.py -v
+        env:
+          OBRAIL_DATASET_PATH: ${{ github.workspace }}/data/eu_trips_v2.csv
+          OBRAIL_MODELS_PATH:  ${{ github.workspace }}/models
+
+      # Entraînement complet + validation métriques + versioning + promotion
+      # Exit code non nul si un seuil n'est pas atteint → étapes suivantes annulées
+      - name: Entraînement, validation et promotion (ml/train.py)
+        run: python ml/train.py
+        env:
+          OBRAIL_DATASET_PATH: ${{ github.workspace }}/data/eu_trips_v2.csv
+          OBRAIL_MODELS_PATH:  ${{ github.workspace }}/models
+
+      # Vérification de non-régression sur le modèle fraîchement promu
+      - name: Non-régression — tests complets du pipeline
+        run: python -m pytest ml/tests -v
+        env:
+          OBRAIL_DATASET_PATH: ${{ github.workspace }}/data/eu_trips_v2.csv
+          OBRAIL_MODELS_PATH:  ${{ github.workspace }}/models
+
+      # Commit des artefacts promus dans le repo (montés par docker-compose)
+      - name: Commit et push des artefacts promus
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add models/
+          if git diff --cached --quiet; then
+            echo "Aucun changement d'artefact à committer."
+          else
+            VERSION=$(date -u +%Y%m%d_%H%M%S)
+            git commit -m "chore(mlops): réentraînement ${VERSION} — ${{ inputs.reason || 'cron hebdomadaire' }}"
+            git push
+          fi
+
+      # Archive du registre versionné (90 jours — permet de télécharger
+      # et restaurer n'importe quelle version sans passer par git)
+      - name: Archiver le registre versionné
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "model-registry-${{ github.run_id }}"
+          path: models/registry/
+          retention-days: 90

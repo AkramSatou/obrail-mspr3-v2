@@ -1,17 +1,18 @@
-# `ml/` — validation et tests du pipeline de modélisation
+# `ml/` — pipeline MLOps et tests du modèle ObRail
 
-Ce dossier contient les règles de validation des données et les tests du **modèle**,
-distincts des tests de l'API qui vivent dans `backend/tests/`.
+Ce dossier contient la chaîne MLOps complète (C13) : script d'entraînement de
+production, règles de validation et tests du modèle.
 
-La distinction est volontaire : les tests backend vérifient que les routes se
-comportent correctement, ceux-ci vérifient que le modèle prédit correctement.
-L'incident 002 est né précisément de cette confusion — les routes étaient
-couvertes, le modèle ne l'était pas.
+Les tests ML sont distincts des tests de l'API (`backend/tests/`) :
+les tests backend vérifient que les routes se comportent correctement,
+ceux-ci vérifient que le modèle prédit correctement.
+L'incident 002 est né précisément de cette confusion.
 
 ## Organisation
 
 ```
 ml/
+├── train.py            Script d'entraînement de production (C13)
 ├── validation/
 │   ├── schema.py       Contrat du jeu de données et règle métier de la cible
 │   └── thresholds.py   Seuils de non-régression, centralisés
@@ -40,16 +41,31 @@ ml/
 | Non-régression classification | Modèle livré | F1-macro, rappel classe 1, exactitude | Seuils sous les performances de référence : détectent une dégradation |
 | Invariants régression | Modèle livré | Positivité, cohérence des scénarios | `xfail` documenté — voir l'incident 003 |
 
+## Chaîne MLOps (C13)
+
+```
+Données → Validation schéma → Entraînement classifieur → Validation métriques
+       → Validation régresseur (invariants) → Versioning registre → Promotion
+       → CI existante (non-régression)
+```
+
+**Déclenchement :** `.github/workflows/model-retrain.yml` (manuel ou cron hebdo).
+**Documentation complète :** `docs/MLOPS_PIPELINE.md`
+
 ## Exécution
 
 ```bash
 pip install -r backend/requirements.txt
+
+# Pipeline MLOps complet (entraînement + validation + versioning + promotion)
+python ml/train.py
+
+# Tests de non-régression seuls (CI existante)
 python -m pytest ml/tests -v
 ```
 
-Les tests s'exécutent aussi automatiquement dans la chaîne d'intégration continue,
-job `model`, avant les jobs de construction et de publication des images : un modèle
-qui ne passe pas ses garde-fous n'est jamais livré.
+Le job `model` dans `ci.yml` exécute `pytest ml/tests` avant toute publication :
+un modèle qui ne passe pas ses garde-fous n'est jamais livré.
 
 ## Seuils de non-régression
 
