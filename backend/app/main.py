@@ -694,6 +694,11 @@ class AgentChatRequest(BaseModel):
 
     message: str = Field(..., min_length=1, max_length=2000, description="Question adressée à l'agent")
     session_id: Optional[str] = Field(default=None, description="Identifiant de session (généré si absent)")
+    fournisseur_force: Optional[str] = Field(
+        default=None,
+        description="Forcer un fournisseur pour cette requête : 'ollama', 'openrouter' ou 'auto'. "
+                    "Ne modifie pas la configuration globale du serveur.",
+    )
 
 
 class EntreeTrace(BaseModel):
@@ -1368,10 +1373,17 @@ def agent_chat(
     """
     import httpx as _httpx
     from app.agent.boucle import executer_boucle
+    from app.agent.selection import obtenir_fournisseur as _obtenir_fournisseur
     try:
+        fournisseur = (
+            _obtenir_fournisseur(requete.fournisseur_force)
+            if requete.fournisseur_force
+            else None
+        )
         resultat = executer_boucle(
             message=requete.message,
             session_id=requete.session_id,
+            fournisseur=fournisseur,
             db=db,
         )
         outils_appeles = [e["outil"] for e in resultat["trace"] if e["type"] == "outil"]
@@ -1393,9 +1405,16 @@ def agent_chat(
             status_code=504,
             detail="Délai d'attente dépassé — l'agent n'a pas répondu à temps",
         )
-    except _httpx.RequestError as exc:
+    except (_httpx.RequestError, _httpx.HTTPStatusError) as exc:
         logger_agent.warning("Agent statut=erreur type=fournisseur_injoignable erreur=%s", exc)
         _record_agent_metric(0.0, 0, "erreur", [])
+        # Invalide le cache auto pour que la prochaine requête re-sélectionne un fournisseur
+        try:
+            from app.agent.selection import invalider_cache_si_auto
+            if fournisseur:
+                invalider_cache_si_auto(fournisseur.nom)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=503,
             detail=f"Fournisseur LLM injoignable : {exc}",
@@ -1409,6 +1428,31 @@ def agent_chat(
         logger_agent.warning("Agent statut=erreur type=rejeu_introuvable erreur=%s", exc)
         _record_agent_metric(0.0, 0, "erreur", [])
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/geocode", tags=["Géocodage"])
+def geocode(
+    origine: str = Query(..., description="Nom du lieu de départ (ville ou gare)"),
+    destination: str = Query(..., description="Nom du lieu d'arrivée (ville ou gare)"),
+    type_train: str = Query("electric", description="Type de traction pour l'estimation de durée"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Géocode deux lieux via Nominatim (OpenStreetMap) et retourne :
+    - distance à vol d'oiseau (formule de Haversine)
+    - durée estimée selon la traction (vitesse conventionnelle, pas un horaire réel)
+    - coordonnées des deux points géocodés
+
+    Passe toujours par le backend pour respecter la politique Nominatim
+    (1 req/s, User-Agent identifiable, cache serveur).
+    """
+    from app.geocodage import calculer_trajet
+    try:
+        return calculer_trajet(origine, destination, type_train)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Service de géocodage indisponible : {exc}")
 
 
 @app.get("/agent/info", response_model=AgentInfoResponse, tags=["Agent IA"])

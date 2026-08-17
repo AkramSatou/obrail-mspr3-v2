@@ -57,7 +57,14 @@ class FournisseurOpenRouter(FournisseurLLM):
                 json=payload,
                 headers=headers,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise httpx.RequestError(
+                    f"OpenRouter HTTP {exc.response.status_code} — "
+                    f"{exc.response.text[:300]}",
+                    request=exc.request,
+                ) from exc
             return response.json()["choices"][0]["message"]
 
 
