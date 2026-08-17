@@ -24,6 +24,13 @@ def _vider_cache() -> None:
     _cache["expire_at"] = 0.0
 
 
+def invalider_cache_si_auto(fournisseur_nom: str) -> None:
+    """À appeler quand un fournisseur échoue en mode auto pour forcer la re-sélection."""
+    if _cache.get("fournisseur_nom") == fournisseur_nom:
+        _vider_cache()
+        logger.info("Cache auto invalidé suite à l'échec de %s", fournisseur_nom)
+
+
 def verifier_disponibilite(fournisseur_nom: str, timeout: float) -> bool:
     """Vérifie si un fournisseur est joignable. Ne lève jamais d'exception."""
     config = charger_config()
@@ -48,15 +55,21 @@ def verifier_disponibilite(fournisseur_nom: str, timeout: float) -> bool:
     return False
 
 
-def obtenir_fournisseur() -> FournisseurLLM:
-    """Retourne le fournisseur LLM selon la configuration ou la détection auto."""
+def obtenir_fournisseur(fournisseur_force: str | None = None) -> FournisseurLLM:
+    """Retourne le fournisseur LLM selon la configuration ou la détection auto.
+
+    fournisseur_force: si fourni, court-circuite la config pour cette requête uniquement.
+    Valeurs acceptées : 'ollama', 'openrouter', 'rejeu', 'auto' (= comportement par défaut).
+    """
     config = charger_config()
 
-    if config.provider == "openrouter":
+    effective = fournisseur_force if (fournisseur_force and fournisseur_force != "auto") else config.provider
+
+    if effective == "openrouter":
         return FournisseurOpenRouter(config)
-    if config.provider == "ollama":
+    if effective == "ollama":
         return FournisseurOllama(config)
-    if config.provider == "rejeu":
+    if effective == "rejeu":
         return FournisseurRejeu()
 
     # Mode auto : vérification ou lecture du cache
