@@ -1,6 +1,7 @@
 # Récap des corrections — ObRail Europe (2026-08-14)
 
-Trois sujets traités dans l'ordre prescrit par `CORRECTIONS_UI_ET_DISTANCE_AUTO.md`.
+Trois sujets traités aujourd'hui, dans cet ordre : le bug du chat IA, quelques corrections
+d'interface, et l'ajout de la distance et de la durée automatiques.
 
 ---
 

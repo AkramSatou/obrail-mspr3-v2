@@ -1,10 +1,9 @@
 # Récap complet des corrections — ObRail Europe
-**Période couverte :** messages du 2026-08-14 au 2026-08-15
-**Spec de départ :** `docs/CORRECTIONS_UI_ET_DISTANCE_AUTO.md` puis `docs/CORRECTIONS_CHAT_ET_FOURNISSEUR.md`
+**Période couverte :** 14 et 15 août 2026
 
 ---
 
-## 1. Corrections d'interface (CORRECTIONS_UI_ET_DISTANCE_AUTO.md)
+## 1. Corrections d'interface
 
 ### 1.1 Badge de statut API (navbar)
 
@@ -192,7 +191,7 @@ Avec l'ajout de la clé OpenRouter dans `.env`, le backend en mode `auto` sélec
 
 ---
 
-## 7. Spec CORRECTIONS_CHAT_ET_FOURNISSEUR.md
+## 7. Chat : persistance, choix du fournisseur, bouton Nouveau chat
 
 ### 7.1 Persistance de la conversation (bug onglet)
 
