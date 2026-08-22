@@ -1,0 +1,22 @@
+{
+  "version": "20260821_225410",
+  "timestamp": "2026-08-21T22:54:14.359659+00:00",
+  "git_commit": "a13f779",
+  "dataset": "eu_trips_v2.csv",
+  "dataset_rows": 142420,
+  "classifier": {
+    "f1_macro": 0.9976,
+    "recall_class1": 0.9958,
+    "accuracy": 0.9993,
+    "n_estimators": 400
+  },
+  "regressor": {
+    "status": "validated_only",
+    "invariants_passed": true
+  },
+  "thresholds_applied": {
+    "f1_macro": 0.95,
+    "recall_class1": 0.9,
+    "accuracy": 0.95
+  }
+}

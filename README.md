@@ -8,7 +8,7 @@
 # ObRail Europe — MSPR TPRE532
 
 > Observatoire ferroviaire européen — Mise en production d'une solution IA  
-> EPSI Lyon — Bachelor Développeur IA — Bloc E6.3 RNCP36581 — 2025/2026
+> EPSI Lyon — Bachelor Développeur IA — Bloc 3, RNCP 37827 — 2025/2026
 
 Dépôt GitHub : https://github.com/AdamSawi/obrail-mspr3
 
@@ -26,7 +26,7 @@ La solution expose une API REST FastAPI connectée à une base PostgreSQL, une i
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et en cours d'exécution
 - Git
-- Ports disponibles : 5432, 8000, 5173, 3001, 9090, 8081, 3100
+- Ports disponibles : 5432, 8000, 5199, 3001, 9090, 8081, 3100
 
 ---
 
@@ -66,7 +66,7 @@ docker compose -f docker/docker-compose.yml down
 
 | Service | URL | Identifiants |
 |---|---|---|
-| Frontend | http://localhost:5173 | — |
+| Frontend | http://localhost:5199 | — |
 | API REST | http://localhost:8000 | — |
 | Documentation Swagger | http://localhost:8000/docs | — |
 | Grafana | http://localhost:3001 | admin / admin |
@@ -291,3 +291,5 @@ Le double tag `latest` + SHA permet de remonter de n'importe quelle image déplo
 | [docs/SECURITY.md](docs/SECURITY.md) | Authentification, matrice des droits, OWASP Top 10 |
 | [docs/AGENT_IA.md](docs/AGENT_IA.md) | Agent IA — architecture, outils, modes LLM, rejeu (C8) |
 | [docs/INCIDENT-002-scaler-inference.md](docs/INCIDENT-002-scaler-inference.md) | Post-mortem correctif StandardScaler XGBoost |
+| [docs/BENCHMARK_SERVICES_IA.md](docs/BENCHMARK_SERVICES_IA.md) | Comparatif des services d'IA étudiés et solution retenue (C7) |
+| [docs/FLUX_DONNEES.md](docs/FLUX_DONNEES.md) | Diagramme de flux de données et conclusion de preuve de concept (C15) |

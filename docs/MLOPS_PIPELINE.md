@@ -228,3 +228,73 @@ python ml/train.py \
 # Vérifier les tests de non-régression après entraînement
 python -m pytest ml/tests -v
 ```
+
+---
+
+## 9. Couverture de tests (ml/tests)
+
+### Installation
+
+`pytest-cov` n'est pas listé dans `backend/requirements.txt`. Installation séparée :
+
+```bash
+pip install pytest-cov
+```
+
+### Commande
+
+```bash
+python -m pytest ml/tests --cov=ml --cov-report=term-missing --cov-config=.coveragerc
+```
+
+Un fichier de configuration dédié exclut `ml/tests/*` du calcul :
+
+```ini
+# .coveragerc
+[run]
+omit =
+    */tests/*
+    */__init__.py
+```
+
+Sans cette exclusion, `--cov=ml` compte aussi les fichiers de tests eux-mêmes, ce qui
+gonfle artificiellement le résultat puisqu'un fichier de test se couvre toujours
+lui-même à près de 100 %.
+
+### Résultat mesuré le 22 août 2026
+
+| Fichier | Instructions | Non couvertes | Couverture |
+|---|---|---|---|
+| `ml/validation/thresholds.py` | 7 | 0 | 100 % |
+| `ml/validation/schema.py` | 57 | 9 | 84 % |
+| `ml/train.py` | 153 | 153 | 0 % (voir note ci-dessous) |
+
+30 tests exécutés, 30 passés.
+
+### Cible retenue
+
+**80 % minimum sur `ml/validation/`**, le seul module unitairement testable par import
+direct depuis la suite `ml/tests`. Cible atteinte et dépassée sur les deux fichiers du
+module (84 % et 100 %).
+
+### Note sur ml/train.py
+
+`ml/train.py` n'est jamais importé par la suite `pytest` : il est exécuté directement
+comme un processus séparé (`python ml/train.py`) dans `model-retrain.yml` (section 2),
+étape suivie d'une exécution complète de `python -m pytest ml/tests -v` en
+non-régression contre le modèle fraîchement entraîné. `pytest-cov` ne peut instrumenter
+que le code réellement importé pendant la mesure : l'exécution en sous-processus dans un
+autre workflow n'apparaît donc jamais dans ce calcul, même si le script tourne bien et
+que sa sortie est vérifiée à chaque réentraînement. Sa correction est donc garantie
+fonctionnellement (exit code non nul si un seuil échoue, section 1) plutôt que mesurée en
+couverture de lignes, et aucune cible de couverture ligne à ligne n'est fixée pour ce
+fichier pour cette raison.
+
+### Lignes non couvertes de schema.py
+
+Les 9 lignes non couvertes (90-92, 101-102, 107-108, 112, 121) correspondent à des
+branches de `validate_dataset` non déclenchées par les jeux de données utilisés dans la
+suite actuelle, ni le jeu réel via les fixtures (toujours conforme), ni le jeu corrompu
+construit à la main dans `test_un_jeu_de_donnees_corrompu_est_bien_rejete` (qui déclenche
+une partie des règles mais pas toutes). Ce ne sont pas des lignes mortes : ce sont des
+règles de validation réelles, simplement non exercées par les scénarios de test actuels.

@@ -25,3 +25,7 @@ token.json
 token.txt
 co2.json
 substitution.json
+
+# Config locale de l'outil Claude Code, pas partagee
+.claude/
+.coverage

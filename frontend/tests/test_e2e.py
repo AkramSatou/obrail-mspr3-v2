@@ -256,3 +256,82 @@ def test_admin_flux_chat_complet_en_mode_rejeu():
         expect(page.locator(".chat-typing")).to_have_count(0)
 
         browser.close()
+
+
+# === Tests Analyses ML (C10) ==================================================
+#
+# L onglet "Analyses" (frontend/src/main.jsx, CalculateurSection) expose trois
+# operations : le calculateur CO2 local (aucun appel reseau, deja couvert par les
+# captures d ecran de C17), et deux appels reels aux routes de prediction ML,
+# reserves aux administrateurs. Les deux tests ci-dessous couvrent ces deux
+# routes en navigateur reel, ce qui manquait jusqu ici : test_e2e.py ne testait
+# que le tableau de bord, les trajets et l assistant IA, jamais /predict/*.
+#
+# Les deux formulaires sont preremplis par defaut avec le cas de reference
+# documente dans l application elle meme (800 km / 195 min pour la substitution,
+# qui correspond exactement a Paris-Marseille, deja verifie cote modele par
+# ml/tests/test_inference_contract.py avec les memes valeurs). Cliquer sur le
+# bouton de prediction sans rien saisir suffit donc a declencher un vrai appel,
+# exactement comme le ferait un utilisateur qui garde les valeurs par defaut.
+
+
+def test_admin_predit_substitution_avion_train_via_ui():
+    """
+    Couvre POST /predict/substitution (C10) en navigateur reel, pas seulement en
+    appel HTTP direct. Le formulaire par defaut (800 km, 195 min, 3 arrets,
+    electrique, FR) reproduit exactement le cas Paris-Marseille deja verifie
+    cote modele : la coherence entre l IHM et le contrat d inference est donc
+    verifiee, pas seulement simulee.
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard_admin(page)
+
+        page.get_by_role("tab", name="Analyses").click(timeout=TIMEOUT_MS)
+        page.get_by_role("button", name="Substitution avion").click(timeout=TIMEOUT_MS)
+
+        expect(page.get_by_role("heading", name="Substitution avion")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+
+        # Formulaire deja valide par les valeurs par defaut : Predire suffit.
+        page.get_by_role("button", name="Prédire").click(timeout=TIMEOUT_MS)
+
+        expect(page.locator(".sub-banner-label")).to_contain_text(
+            "Substituable", timeout=TIMEOUT_MS
+        )
+        expect(page.locator(".sub-banner-proba")).to_be_visible(timeout=TIMEOUT_MS)
+
+        browser.close()
+
+
+def test_admin_predit_projection_co2_via_ui():
+    """
+    Couvre POST /predict/co2 (C10) en navigateur reel. Le calculateur appelle
+    cette route quatre fois en parallele, une par scenario d evolution du
+    reseau (reference, 50% electrique, conso -15%, distance -10%), et affiche
+    un resultat chiffre par scenario.
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        open_dashboard_admin(page)
+
+        page.get_by_role("tab", name="Analyses").click(timeout=TIMEOUT_MS)
+        page.get_by_role("button", name="Projection CO").click(timeout=TIMEOUT_MS)
+
+        expect(page.get_by_role("heading", name="Projection CO")).to_be_visible(
+            timeout=TIMEOUT_MS
+        )
+
+        # Formulaire deja valide par les valeurs par defaut (400 km, 120 min).
+        page.get_by_role("button", name="Analyser les 4 scénarios").click(timeout=TIMEOUT_MS)
+
+        rows = page.locator(".proj-row")
+        expect(rows).to_have_count(4, timeout=TIMEOUT_MS)
+        expect(page.locator(".proj-co2-val").first).to_contain_text(
+            "kg CO", timeout=TIMEOUT_MS
+        )
+
+        browser.close()
